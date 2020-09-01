@@ -44,6 +44,9 @@ pub use sp_runtime::{Perbill, Permill};
 /// Import the template pallet.
 pub use template;
 
+/// Import the technical accounts.
+pub use technical_accounts;
+
 /// Import the message pallet.
 pub use cumulus_token_dealer;
 
@@ -397,6 +400,11 @@ impl template::Trait for Runtime {
 	type Event = Event;
 }
 
+/// Configure the pallet technical-accounts in pallets folder.
+impl technical_accounts::Trait for Runtime {
+	type Event = Event;
+}
+
 /// Payload data to be signed when making signed transaction from off-chain workers,
 ///   inside `create_transaction` function.
 pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
@@ -433,6 +441,7 @@ construct_runtime! {
 		ParachainInfo: parachain_info::{Module, Storage, Config},
 		TokenDealer: cumulus_token_dealer::{Module, Call, Event<T>},
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
+		TechnicalAccountsModule: technical_accounts::{Module, Call, Storage, Event<T>},
 
 		XOR: pallet_balances::<Instance1>::{Module, Call, Storage, Config<T>, Event<T>},
 		DOT: pallet_balances::<Instance2>::{Module, Call, Storage, Config<T>, Event<T>},
