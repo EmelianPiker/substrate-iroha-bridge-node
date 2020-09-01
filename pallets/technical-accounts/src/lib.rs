@@ -7,6 +7,14 @@
 
 use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, traits::Get};
 use frame_system::ensure_signed;
+use frame_support::{weights::Weight};
+
+//use sp_std::{ops::BitOr};
+use sp_runtime::traits::{Member, AtLeast32Bit, AtLeast32BitUnsigned, Zero, StaticLookup};
+use frame_support::{Parameter, ensure, dispatch::DispatchResult};
+use sp_runtime::RuntimeDebug;
+use codec::{Encode, Decode};
+
 
 #[cfg(test)]
 mod mock;
@@ -14,10 +22,55 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+/// Hashed proof type.
+pub type HashedProof = [u8; 32];
+
+/// Definition of a pending atomic swap action. It contains the following three phrases:
+///
+/// - **Reserve**: reserve the resources needed for a swap. This is to make sure that **Claim**
+/// succeeds with best efforts.
+/// - **Claim**: claim any resources reserved in the first phrase.
+/// - **Cancel**: cancel any resources reserved in the first phrase.
+pub trait SwapAction<AccountId, T: Trait> {
+	/// Reserve the resources needed for the swap, from the given `source`. The reservation is
+	/// allowed to fail. If that is the case, the the full swap creation operation is cancelled.
+	fn reserve(&self, source: &AccountId) -> DispatchResult;
+	/// Claim the reserved resources, with `source` and `target`. Returns whether the claim
+	/// succeeds.
+	fn claim(&self, source: &AccountId, target: &AccountId) -> bool;
+	/// Weight for executing the operation.
+	fn weight(&self) -> Weight;
+	/// Cancel the resources reserved in `source`.
+	fn cancel(&self, source: &AccountId);
+}
+
+/// Pending atomic swap operation.
+#[derive(Clone, Eq, PartialEq, RuntimeDebug, Encode, Decode)]
+pub struct PendingSwap<T: Trait> {
+	/// Source of the swap.
+	pub source: T::AccountId,
+	/// Action of this swap.
+	pub action: T::SwapAction,
+	/// End block of the lock.
+	pub end_block: T::BlockNumber,
+}
+
+
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
+
+    /// The units in which we record balances.
+    type Balance: Member + Parameter + AtLeast32BitUnsigned + Default + Copy;
+
+    /// The arithmetic type of asset identifier.
+    type AssetId: Parameter + AtLeast32Bit + Default + Copy;
+
+    type TechnicalId: Parameter + AtLeast32Bit + Default + Copy;
+
+    /// Swap action.
+    type SwapAction: SwapAction<Self::AccountId, Self> + Parameter;
 }
 
 // The pallet's runtime storage items.
@@ -30,16 +83,56 @@ decl_storage! {
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 		Something get(fn something): Option<u32>;
+
+        /// The number of units of assets held by any given technical account.
+        Balances: map hasher(blake2_128_concat) (T::AssetId, T::TechnicalId) => T::Balance;
+	}
+}
+
+// The main implementation block for the module.
+impl<T: Trait> Module<T> {
+	/// Get the asset `id` balance of `who`.
+	pub fn balance(id: T::AssetId, who: T::TechnicalId) -> T::Balance {
+		<Balances<T>>::get((id, who))
 	}
 }
 
 // Pallets use events to inform users when important changes are made.
 // https://substrate.dev/docs/en/knowledgebase/runtime/events
 decl_event!(
-	pub enum Event<T> where AccountId = <T as frame_system::Trait>::AccountId {
+	pub enum Event<T> where AccountId = <T as frame_system::Trait>::AccountId,
+		<T as Trait>::TechnicalId,
+		<T as Trait>::AssetId,
+		<T as Trait>::Balance,
+        PendingSwap = PendingSwap<T>,
+
+    {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		SomethingStored(u32, AccountId),
+
+		/// Some assets were issued. [asset_id, owner, total_supply]
+		Issued(AssetId, TechnicalId, Balance),
+
+		/// Some assets were transferred out. [asset_id, from, to, amount]
+		OutputTransferred(AssetId, TechnicalId, AccountId, Balance),
+
+		/// Some assets were transferred in. [asset_id, from, to, amount]
+		InputTransferred(AssetId, AccountId, TechnicalId, Balance),
+
+        /// Swap created. [asset, asset, account, proof, swap]
+        SwapCreated(AssetId, AssetId, AccountId, HashedProof, PendingSwap),
+
+		/// Swap claimed. The last parameter indicates whether the execution succeeds. 
+		/// [account, proof, success]
+		SwapClaimed(AccountId, HashedProof, bool),
+
+		/// Swap cancelled. [account, proof]
+		SwapCancelled(AccountId, HashedProof),
+
+		/// Some assets were destroyed. [asset_id, owner, balance]
+		Destroyed(AssetId, AccountId, Balance),
+
 	}
 );
 
@@ -50,8 +143,90 @@ decl_error! {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+
+		/// Vesting balance too high to send value
+		VestingBalance,
+		/// Account liquidity restrictions prevent withdrawal
+		LiquidityRestrictions,
+		/// Got an overflow after adding
+		Overflow,
+		/// Balance too low to send value
+		InsufficientBalance,
+		/// Value too low to create account due to existential deposit
+		ExistentialDeposit,
+		/// Transfer/payment would kill account
+		KeepAlive,
+		/// A vesting schedule already exists for this account
+		ExistingVestingSchedule,
+		/// Beneficiary account must pre-exist
+		DeadAccount,
 	}
 }
+
+/*
+/// Simplified reasons for withdrawing balance.
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug)]
+pub enum Reasons {
+	/// Paying system transaction fees.
+	Fee = 0,
+	/// Any reason other than paying system transaction fees.
+	Misc = 1,
+	/// Any reason at all.
+	All = 2,
+}
+
+impl From<WithdrawReasons> for Reasons {
+	fn from(r: WithdrawReasons) -> Reasons {
+		if r == WithdrawReasons::from(WithdrawReason::TransactionPayment) {
+			Reasons::Fee
+		} else if r.contains(WithdrawReason::TransactionPayment) {
+			Reasons::All
+		} else {
+			Reasons::Misc
+		}
+	}
+}
+
+impl BitOr for Reasons {
+	type Output = Reasons;
+	fn bitor(self, other: Reasons) -> Reasons {
+		if self == other { return self }
+		Reasons::All
+	}
+}
+*/
+
+/*
+/// All balance information for an account.
+#[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug)]
+pub struct AccountData<Balance> {
+	/// Non-reserved part of the balance. There may still be restrictions on this, but it is the
+	/// total pool what may in principle be transferred, reserved and used for tipping.
+	///
+	/// This is the only balance that matters in terms of most operations on tokens. It
+	/// alone is used to determine the balance when in the contract execution environment.
+	pub free: Balance,
+	/// Balance which is reserved and may not be used at all.
+	///
+	/// This can still get slashed, but gets slashed last of all.
+	///
+	/// This balance is a 'reserve' balance that other subsystems use in order to set aside tokens
+	/// that are still 'owned' by the account holder, but which are suspendable.
+	pub reserved: Balance,
+	/// The amount that `free` may not drop below when withdrawing for *anything except transaction
+	/// fee payment*.
+	pub misc_frozen: Balance,
+	/// The amount that `free` may not drop below when withdrawing specifically for transaction
+	/// fee payment.
+	pub fee_frozen: Balance,
+}
+
+impl<Balance: Saturating + Copy + Ord> AccountData<Balance> {
+	fn usable(&self, reasons: Reasons) -> Balance { self.free }
+	fn frozen(&self, reasons: Reasons) -> Balance { 0 }
+	fn total(&self) -> Balance { self.free }
+}
+*/
 
 // Dispatchable functions allows users to interact with the pallet and invoke state changes.
 // These functions materialize as "extrinsics", which are often compared to transactions.
