@@ -4,7 +4,7 @@ description = 'Consensus accounts for DEX purposes'
 edition = '2018'
 homepage = 'https://github.com/EmelianPiker/substrate-iroha-bridge-node/tree/zhukov/technical-accounts-DRAFT-01'
 license = 'Unlicense'
-name = 'technical-accounts'
+name = 'technical'
 repository = 'https://github.com/EmelianPiker/substrate-iroha-bridge-node/tree/zhukov/technical-accounts-DRAFT-01'
 version = '0.0.0'
 
