@@ -5,9 +5,16 @@ authors = ["Vladislav Markushin <negigic@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-currencies = { package = "orml-currencies", branch = "rococo-rc6", git = "https://github.com/open-web3-stack/open-runtime-module-library.git" }
+currencies = { package = "orml-currencies", branch = "rococo-branch", git = "https://github.com/vmarkushin/open-runtime-module-library" }
 
 [dependencies.sp-arithmetic]
 default-features = false
 git = "https://github.com/paritytech/substrate"
 branch = "rococo-branch"
+
+[features]
+default = ['std']
+std = [
+    'sp-arithmetic/std',
+    'currencies/std',
+]

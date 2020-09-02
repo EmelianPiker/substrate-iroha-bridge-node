@@ -5,6 +5,7 @@ members = [
 	"common",
 	"pallets/parachain-info",
 	"pallets/token-dealer",
+	"pallets/trading-pair",
 	"pallets/template",
 ]
 

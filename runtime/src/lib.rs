@@ -283,6 +283,15 @@ impl treasury::Trait for Runtime {
     type KSM = pallet_balances::Module<Runtime, pallet_balances::Instance3>;
 }
 
+impl common::Trait for Runtime {
+	type DexId = String;
+	type AssetId = String;
+}
+
+impl trading_pair::Trait for Runtime {
+	type Event = Event;
+}
+
 impl<T: SigningTypes> frame_system::offchain::SignMessage<T> for Runtime {
     type SignatureData = ();
 

@@ -11,3 +11,8 @@ pub trait LiquiditySource {
     fn target_asset_reserve() -> Fractional;
     // fn add_liquidity, remove_liquidity...
 }
+
+pub trait Trait {
+    type DexId;
+    type AssetId;
+}
