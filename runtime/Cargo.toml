@@ -80,7 +80,6 @@ std = [
 	"cumulus-primitives/std",
 	"cumulus-token-dealer/std",
 	"template/std",
-	"iroha-bridge/std",
 ]
 # Will be enabled by the `wasm-builder` when building the runtime for WASM.
 runtime-wasm = [
