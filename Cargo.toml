@@ -1,10 +1,11 @@
 [workspace]
 members = [
+	"node/",
 	"runtime/",
+	"common",
 	"pallets/parachain-info",
 	"pallets/token-dealer",
 	"pallets/template",
-	"node/",
 ]
 
 [profile.release]
