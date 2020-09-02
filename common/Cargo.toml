@@ -1,0 +1,13 @@
+[package]
+name = "common"
+version = "0.1.0"
+authors = ["Vladislav Markushin <negigic@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+currencies = { package = "orml-currencies", branch = "rococo-rc6", git = "https://github.com/open-web3-stack/open-runtime-module-library.git" }
+
+[dependencies.sp-arithmetic]
+default-features = false
+git = "https://github.com/paritytech/substrate"
+branch = "rococo-branch"
