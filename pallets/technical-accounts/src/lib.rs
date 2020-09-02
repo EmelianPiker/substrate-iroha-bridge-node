@@ -71,6 +71,7 @@ pub trait Trait: frame_system::Trait {
 
     /// Swap action.
     type SwapAction: SwapAction<Self::AccountId, Self> + Parameter;
+    //type SwapAction: SwapAction<Self::AccountId, Self>;
 }
 
 // The pallet's runtime storage items.
